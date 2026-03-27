@@ -165,32 +165,45 @@ function Install-PSModule {
         [switch]$AllowClobber
     )
 
-    # TODO: Implement this function.
-    #
-    # This is where the meaningful design choices live:
-    #   - How to check if the module is already installed (Get-Module -ListAvailable)
-    #   - How to build the Install-Module splat (Scope, Force, SkipPublisherCheck, etc.)
-    #   - How to handle errors (try/catch, add to $results.Failed)
-    #   - Whether to add -SkipPublisherCheck for modules like Pester
-    #
-    # Available variables from outer scope:
-    #   $results  — hashtable with .Installed, .Skipped, .Failed lists
-    #
-    # Expected behavior:
-    #   1. Check if module is already installed → skip if yes (add to $results.Skipped)
-    #   2. Guard with $PSCmdlet.ShouldProcess for -WhatIf/-DryRun support
-    #   3. Build Install-Module splat using $ModuleName, -Scope AllUsers, -Force
-    #   4. Conditionally add -AllowPrerelease and -AllowClobber from switch params
-    #   5. try/catch the install — green success or red failure message
-    #
-    # Guidance:
-    #   - Use splatting (@installParams) for the Install-Module call
-    #   - Scope should be AllUsers since we're running as admin
-    #   - Consider adding -SkipPublisherCheck (needed for Pester on Windows)
-    #   - Write-Host with -ForegroundColor Green/Yellow/Red for status
-    #   - Follow the same output pattern as Install-WingetPackage above
+    $existingModule = Get-Module -ListAvailable -Name $ModuleName -ErrorAction SilentlyContinue |
+        Select-Object -First 1
 
-    Write-Host "  $ModuleName : [NOT IMPLEMENTED - see TODO in Install-PSModule]" -ForegroundColor Magenta
+    if ($existingModule) {
+        Write-Host "  $ModuleName : Already installed (v$($existingModule.Version))" -ForegroundColor Green
+        $results.Skipped.Add($ModuleName)
+        return
+    }
+
+    if (-not $PSCmdlet.ShouldProcess($ModuleName, 'Install-Module')) {
+        return
+    }
+
+    Write-Host "  $ModuleName : Installing..." -ForegroundColor Yellow
+
+    $installParams = @{
+        Name               = $ModuleName
+        Repository         = 'PSGallery'
+        Scope              = 'AllUsers'
+        Force              = $true
+        SkipPublisherCheck = $true
+    }
+
+    if ($AllowPrerelease) {
+        $installParams.AllowPrerelease = $true
+    }
+    if ($AllowClobber) {
+        $installParams.AllowClobber = $true
+    }
+
+    try {
+        Install-Module @installParams
+        Write-Host "  $ModuleName : Installed" -ForegroundColor Green
+        $results.Installed.Add($ModuleName)
+    }
+    catch {
+        Write-Host "  $ModuleName : FAILED - $($_.Exception.Message)" -ForegroundColor Red
+        $results.Failed.Add($ModuleName)
+    }
 }
 
 function Install-VSCodeExtension {
@@ -328,8 +341,24 @@ if (-not $SkipWinget) {
 if (-not $SkipClaudeCode) {
     Write-Host "`n=== Claude Code (npm) ===" -ForegroundColor Cyan
 
+    # npm may not be in PATH yet if Node.js was just installed — check known locations
+    if (-not (Test-CommandExists -CommandName 'npm')) {
+        $nodePaths = @(
+            "$env:ProgramFiles\nodejs"
+            "$env:LOCALAPPDATA\Programs\nodejs"
+        )
+        foreach ($nodePath in $nodePaths) {
+            if (Test-Path -Path "$nodePath\npm.cmd") {
+                Write-Host "  npm found at $nodePath (not yet in PATH)" -ForegroundColor DarkGray
+                $env:PATH = "$nodePath;$env:PATH"
+                break
+            }
+        }
+    }
+
     if (-not (Test-CommandExists -CommandName 'npm')) {
         Write-Host '  npm not found. Install Node.js first (included in winget section).' -ForegroundColor Red
+        Write-Host '  If Node.js was just installed, restart your terminal and re-run.' -ForegroundColor Yellow
         $results.Failed.Add('claude-code (npm not available)')
     }
     else {
