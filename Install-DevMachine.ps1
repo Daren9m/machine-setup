@@ -134,7 +134,7 @@ function Install-WingetPackage {
             '--exact'
             '--accept-source-agreements'
             '--accept-package-agreements'
-            '--silent'
+            '--disable-interactivity'
         )
         & winget @installArgs 2>&1 | Out-Null
         if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq -1978335189) {
@@ -373,8 +373,12 @@ if (-not $SkipClaudeCode) {
         $results.Failed.Add('claude-code (npm not available)')
     }
     else {
-        $npmList = npm list -g @anthropic-ai/claude-code 2>&1
-        $isClaudeInstalled = $npmList | Select-String -Pattern 'claude-code' -Quiet
+        $isClaudeInstalled = $false
+        try {
+            $npmList = npm list -g @anthropic-ai/claude-code 2>&1 | Out-String
+            $isClaudeInstalled = $npmList -match 'claude-code'
+        }
+        catch { }
 
         if ($isClaudeInstalled) {
             Write-Host '  claude-code: Already installed' -ForegroundColor Green
