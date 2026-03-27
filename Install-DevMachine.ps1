@@ -6,7 +6,7 @@
     Claude Code (via npm), VS Code extensions, and M365/Azure PowerShell modules.
     Requires Administrator elevation for machine-wide installs.
 
-    Safe to re-run — skips anything already installed.
+    Safe to re-run -- skips anything already installed.
 .PARAMETER DryRun
     Preview all actions without installing anything.
 .PARAMETER SkipWinget
@@ -162,16 +162,24 @@ function Install-PSModule {
         [switch]$AllowPrerelease,
 
         [Parameter()]
-        [switch]$AllowClobber
+        [switch]$AllowClobber,
+
+        [Parameter()]
+        [version]$MinVersion
     )
 
     $existingModule = Get-Module -ListAvailable -Name $ModuleName -ErrorAction SilentlyContinue |
         Select-Object -First 1
 
     if ($existingModule) {
-        Write-Host "  $ModuleName : Already installed (v$($existingModule.Version))" -ForegroundColor Green
-        $results.Skipped.Add($ModuleName)
-        return
+        if ($MinVersion -and $existingModule.Version -lt $MinVersion) {
+            Write-Host "  $ModuleName : Found v$($existingModule.Version), upgrading to v$MinVersion+..." -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "  $ModuleName : Already installed (v$($existingModule.Version))" -ForegroundColor Green
+            $results.Skipped.Add($ModuleName)
+            return
+        }
     }
 
     if (-not $PSCmdlet.ShouldProcess($ModuleName, 'Install-Module')) {
@@ -283,7 +291,7 @@ $vsCodeExtensions = @(
 
 $psModules = @(
     @{ Name = 'PSScriptAnalyzer' }
-    @{ Name = 'Pester';                                AllowClobber = $true }
+    @{ Name = 'Pester';                                AllowClobber = $true; MinVersion = '5.0.0' }
     @{ Name = 'Microsoft.Graph' }
     @{ Name = 'Az';                                    AllowClobber = $true }
     @{ Name = 'ExchangeOnlineManagement' }
@@ -341,7 +349,7 @@ if (-not $SkipWinget) {
 if (-not $SkipClaudeCode) {
     Write-Host "`n=== Claude Code (npm) ===" -ForegroundColor Cyan
 
-    # npm may not be in PATH yet if Node.js was just installed — check known locations
+    # npm may not be in PATH yet if Node.js was just installed -- check known locations
     if (-not (Test-CommandExists -CommandName 'npm')) {
         $nodePaths = @(
             "$env:ProgramFiles\nodejs"
@@ -443,12 +451,15 @@ if (-not $SkipModules) {
         if ($mod.AllowClobber) {
             $splatArgs.AllowClobber = $true
         }
+        if ($mod.MinVersion) {
+            $splatArgs.MinVersion = [version]$mod.MinVersion
+        }
 
         if ($mod.Name -eq 'Microsoft.Graph') {
-            Write-Host '  Microsoft.Graph: This is a large module — install may take several minutes...' -ForegroundColor DarkGray
+            Write-Host '  Microsoft.Graph: This is a large module -- install may take several minutes...' -ForegroundColor DarkGray
         }
         if ($mod.Name -eq 'Az') {
-            Write-Host '  Az: This is a large module — install may take several minutes...' -ForegroundColor DarkGray
+            Write-Host '  Az: This is a large module -- install may take several minutes...' -ForegroundColor DarkGray
         }
 
         Install-PSModule @splatArgs
