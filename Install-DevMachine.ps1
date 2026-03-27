@@ -276,6 +276,7 @@ $wingetPackages = @(
     @{ PackageId = 'BurntSushi.ripgrep.MSVC';    DisplayName = 'ripgrep';           TestCommand = 'rg' }
     @{ PackageId = 'Microsoft.DotNet.SDK.8';     DisplayName = '.NET SDK 8';        TestCommand = 'dotnet' }
     @{ PackageId = 'ISC.BIND';                   DisplayName = 'BIND (dig)';        TestCommand = 'dig' }
+    @{ PackageId = 'Bitwarden.Bitwarden';        DisplayName = 'Bitwarden';         TestCommand = '' }
 )
 
 $vsCodeExtensions = @(
@@ -418,6 +419,30 @@ if (-not $SkipExtensions) {
 }
 
 #endregion Section 3
+
+#region Section 3b: Edge Extensions
+
+if (-not $SkipExtensions) {
+    Write-Host "`n=== Edge Extensions (manual install) ===" -ForegroundColor Cyan
+
+    $edgeExtensions = @(
+        @{
+            Name = 'Bitwarden'
+            Url  = 'https://microsoftedge.microsoft.com/addons/detail/bitwarden-password-manage/jbkfoedolllekgbhcbcoahefnbanhhlh'
+        }
+    )
+
+    foreach ($ext in $edgeExtensions) {
+        if ($PSCmdlet.ShouldProcess($ext.Name, 'Open Edge Add-ons page')) {
+            Write-Host "  $($ext.Name): Opening Edge Add-ons page..." -ForegroundColor Yellow
+            Start-Process $ext.Url
+        }
+    }
+
+    Write-Host '  NOTE: Edge extensions require manual "Get" click in the browser.' -ForegroundColor DarkYellow
+}
+
+#endregion Section 3b
 
 #region Section 4: PowerShell Modules
 
