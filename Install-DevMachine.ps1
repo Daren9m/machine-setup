@@ -275,6 +275,7 @@ $wingetPackages = @(
     @{ PackageId = 'jqlang.jq';                  DisplayName = 'jq';                TestCommand = 'jq' }
     @{ PackageId = 'BurntSushi.ripgrep.MSVC';    DisplayName = 'ripgrep';           TestCommand = 'rg' }
     @{ PackageId = 'Microsoft.DotNet.SDK.8';     DisplayName = '.NET SDK 8';        TestCommand = 'dotnet' }
+    @{ PackageId = 'ISC.BIND';                   DisplayName = 'BIND (dig)';        TestCommand = 'dig' }
 )
 
 $vsCodeExtensions = @(
