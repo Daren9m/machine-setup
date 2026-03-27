@@ -275,7 +275,7 @@ $wingetPackages = @(
     @{ PackageId = 'jqlang.jq';                  DisplayName = 'jq';                TestCommand = 'jq' }
     @{ PackageId = 'BurntSushi.ripgrep.MSVC';    DisplayName = 'ripgrep';           TestCommand = 'rg' }
     @{ PackageId = 'Microsoft.DotNet.SDK.10';    DisplayName = '.NET SDK 10';       TestCommand = '' }
-    @{ PackageId = 'ISC.BIND';                   DisplayName = 'BIND (dig)';        TestCommand = 'dig' }
+    @{ PackageId = 'ISC.Bind';                   DisplayName = 'BIND (dig)';        TestCommand = 'dig' }
     @{ PackageId = 'Bitwarden.Bitwarden';        DisplayName = 'Bitwarden';         TestCommand = '' }
     @{ PackageId = 'GodotEngine.GodotEngine';    DisplayName = 'Godot 4';           TestCommand = '' }
 )
