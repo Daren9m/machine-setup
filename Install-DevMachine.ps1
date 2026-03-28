@@ -15,6 +15,9 @@
     Skip VS Code extension installation.
 .PARAMETER SkipModules
     Skip PowerShell module installation.
+.PARAMETER IncludeDocker
+    Install Docker Desktop and enable WSL 2. Requires nested virtualization
+    (not available on all Azure VM SKUs or Windows 365 Cloud PCs).
 .EXAMPLE
     .\Install-DevMachine.ps1
     Install everything on a fresh machine.
@@ -24,6 +27,9 @@
 .EXAMPLE
     .\Install-DevMachine.ps1 -SkipModules
     Install CLI tools and VS Code extensions only.
+.EXAMPLE
+    .\Install-DevMachine.ps1 -IncludeDocker
+    Install everything plus Docker Desktop and WSL 2.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
@@ -37,7 +43,10 @@ param(
     [switch]$SkipExtensions,
 
     [Parameter()]
-    [switch]$SkipModules
+    [switch]$SkipModules,
+
+    [Parameter()]
+    [switch]$IncludeDocker
 )
 
 #region Initialization
@@ -300,6 +309,11 @@ $wingetPackages = @(
     @{ PackageId = 'ISC.Bind';                   DisplayName = 'BIND (dig)';        TestCommand = 'dig' }
     @{ PackageId = 'Bitwarden.Bitwarden';        DisplayName = 'Bitwarden';         TestCommand = '' }
     @{ PackageId = 'GodotEngine.GodotEngine';    DisplayName = 'Godot 4';           TestCommand = '' }
+    @{ PackageId = 'Microsoft.AzureCLI';         DisplayName = 'Azure CLI';         TestCommand = 'az' }
+    @{ PackageId = 'Hashicorp.Terraform';        DisplayName = 'Terraform';         TestCommand = 'terraform' }
+    @{ PackageId = 'Microsoft.Azure.DataStudio'; DisplayName = 'Azure Data Studio'; TestCommand = '' }
+    @{ PackageId = 'Microsoft.WindowsTerminal';  DisplayName = 'Windows Terminal';  TestCommand = 'wt' }
+    @{ PackageId = 'Microsoft.Sysinternals.Suite'; DisplayName = 'Sysinternals Suite'; TestCommand = '' }
 )
 
 $vsCodeExtensions = @(
@@ -312,6 +326,8 @@ $vsCodeExtensions = @(
     'redhat.vscode-yaml'
     'esbenp.prettier-vscode'
     'ms-azuretools.vscode-bicep'
+    'hashicorp.terraform'
+    'ms-vscode.vscode-node-azure-pack'
 )
 
 $psModules = @(
@@ -326,6 +342,7 @@ $psModules = @(
     @{ Name = 'ImportExcel' }
     @{ Name = 'ScubaGear' }
     @{ Name = 'Microsoft.Graph.Entra';                 AllowPrerelease = $true }
+    @{ Name = 'InformationProtection' }
 )
 
 #endregion Data Definitions
@@ -369,6 +386,42 @@ if (-not $SkipWinget) {
 
 #endregion Section 1
 
+#region Section 1b: Docker & WSL 2 (optional)
+
+if ($IncludeDocker -and -not $SkipWinget) {
+    Write-Host "`n=== Docker & WSL 2 (optional) ===" -ForegroundColor Cyan
+    Write-Host '  NOTE: Requires nested virtualization (not available on all Azure VM SKUs).' -ForegroundColor DarkYellow
+
+    # Enable WSL 2 if not already present
+    $wslStatus = wsl --status 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        if ($PSCmdlet.ShouldProcess('WSL 2', 'Enable via wsl --install')) {
+            Write-Host '  WSL 2: Enabling (no distribution)...' -ForegroundColor Yellow
+            try {
+                wsl --install --no-distribution 2>&1 | Out-Null
+                Write-Host '  WSL 2: Enabled (reboot may be required)' -ForegroundColor Green
+                $results.Installed.Add('WSL 2')
+            }
+            catch {
+                Write-Host "  WSL 2: FAILED - $($_.Exception.Message)" -ForegroundColor Red
+                $results.Failed.Add('WSL 2')
+            }
+        }
+    }
+    else {
+        Write-Host '  WSL 2: Already enabled' -ForegroundColor Green
+        $results.Skipped.Add('WSL 2')
+    }
+
+    # Install Docker Desktop
+    Install-WingetPackage -PackageId 'Docker.DockerDesktop' -DisplayName 'Docker Desktop' -TestCommand 'docker'
+
+    Write-Host "`n  Refreshing PATH..." -ForegroundColor DarkGray
+    Update-SessionPath
+}
+
+#endregion Section 1b
+
 #region Section 2: VS Code Extensions
 
 if (-not $SkipExtensions) {
@@ -381,6 +434,10 @@ if (-not $SkipExtensions) {
     else {
         foreach ($extId in $vsCodeExtensions) {
             Install-VSCodeExtension -ExtensionId $extId
+        }
+
+        if ($IncludeDocker) {
+            Install-VSCodeExtension -ExtensionId 'ms-azuretools.vscode-docker'
         }
     }
 }
@@ -472,6 +529,33 @@ if (-not $SkipModules) {
 
 #endregion Section 3
 
+#region Section 3b: MIP SDK (NuGet)
+
+if (-not $SkipModules) {
+    Write-Host "`n=== MIP SDK (NuGet) ===" -ForegroundColor Cyan
+
+    $mipPackageName = 'Microsoft.InformationProtection.File'
+    $existingMip = Get-Package -Name $mipPackageName -ErrorAction SilentlyContinue
+    if ($existingMip) {
+        Write-Host "  $mipPackageName : Already installed (v$($existingMip.Version))" -ForegroundColor Green
+        $results.Skipped.Add($mipPackageName)
+    }
+    elseif ($PSCmdlet.ShouldProcess($mipPackageName, 'Install NuGet package')) {
+        Write-Host "  $mipPackageName : Installing..." -ForegroundColor Yellow
+        try {
+            Install-Package -Name $mipPackageName -Source 'nuget.org' -ProviderName NuGet -Scope AllUsers -Force | Out-Null
+            Write-Host "  $mipPackageName : Installed" -ForegroundColor Green
+            $results.Installed.Add($mipPackageName)
+        }
+        catch {
+            Write-Host "  $mipPackageName : FAILED - $($_.Exception.Message)" -ForegroundColor Red
+            $results.Failed.Add($mipPackageName)
+        }
+    }
+}
+
+#endregion Section 3b
+
 #region Summary
 
 Write-Host "`n========================================" -ForegroundColor Cyan
@@ -496,6 +580,10 @@ Write-Host "`n  Post-install reminders:" -ForegroundColor Yellow
 Write-Host '    1. Restart your terminal to pick up PATH changes' -ForegroundColor Yellow
 Write-Host '    2. Run "Initialize-SCuBA" if you installed ScubaGear' -ForegroundColor Yellow
 Write-Host '    3. Run "gh auth login" to authenticate GitHub CLI' -ForegroundColor Yellow
+Write-Host '    4. Run "az login" to authenticate Azure CLI' -ForegroundColor Yellow
+if ($IncludeDocker) {
+    Write-Host '    5. A reboot may be required to complete WSL 2 / Docker setup' -ForegroundColor Yellow
+}
 Write-Host ''
 
 #endregion Summary
