@@ -3,7 +3,7 @@
     Bootstraps a Windows 11 dev machine with CLI tools, VS Code extensions, and PowerShell modules.
 .DESCRIPTION
     Idempotent setup script that installs developer tooling (via winget),
-    Claude Code (via npm), VS Code extensions, and M365/Azure PowerShell modules.
+    VS Code extensions, Edge extensions, and M365/Azure PowerShell modules.
     Requires Administrator elevation for machine-wide installs.
 
     Safe to re-run -- skips anything already installed.
@@ -11,8 +11,6 @@
     Preview all actions without installing anything.
 .PARAMETER SkipWinget
     Skip winget package installation.
-.PARAMETER SkipClaudeCode
-    Skip Claude Code (npm) installation.
 .PARAMETER SkipExtensions
     Skip VS Code extension installation.
 .PARAMETER SkipModules
@@ -25,7 +23,7 @@
     Preview what would be installed without making changes.
 .EXAMPLE
     .\Install-DevMachine.ps1 -SkipModules
-    Install CLI tools, Claude Code, and VS Code extensions only.
+    Install CLI tools and VS Code extensions only.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
@@ -34,9 +32,6 @@ param(
 
     [Parameter()]
     [switch]$SkipWinget,
-
-    [Parameter()]
-    [switch]$SkipClaudeCode,
 
     [Parameter()]
     [switch]$SkipExtensions,
@@ -72,6 +67,29 @@ $results = @{
 }
 
 #endregion Initialization
+
+#region Section 0: Directory Structure
+
+Write-Host "`n=== Directory Structure ===" -ForegroundColor Cyan
+
+$gitRoot = 'C:\git'
+if (Test-Path -Path $gitRoot) {
+    Write-Host "  $gitRoot : Already exists" -ForegroundColor Green
+    $results.Skipped.Add($gitRoot)
+}
+elseif ($PSCmdlet.ShouldProcess($gitRoot, 'Create directory')) {
+    try {
+        New-Item -Path $gitRoot -ItemType Directory -Force | Out-Null
+        Write-Host "  $gitRoot : Created" -ForegroundColor Green
+        $results.Installed.Add($gitRoot)
+    }
+    catch {
+        Write-Host "  $gitRoot : FAILED - $($_.Exception.Message)" -ForegroundColor Red
+        $results.Failed.Add($gitRoot)
+    }
+}
+
+#endregion Section 0
 
 #region Helper Functions
 
@@ -271,6 +289,10 @@ $wingetPackages = @(
     @{ PackageId = 'Microsoft.PowerShell';       DisplayName = 'PowerShell 7';      TestCommand = 'pwsh' }
     @{ PackageId = 'Microsoft.VisualStudioCode'; DisplayName = 'Visual Studio Code'; TestCommand = 'code' }
     @{ PackageId = 'Anthropic.Claude';           DisplayName = 'Claude Desktop';    TestCommand = '' }
+    @{ PackageId = 'Anthropic.ClaudeCode';       DisplayName = 'Claude Code';       TestCommand = 'claude' }
+    @{ PackageId = 'GitHub.GitHubDesktop';       DisplayName = 'GitHub Desktop';    TestCommand = '' }
+    @{ PackageId = 'Google.Chrome';              DisplayName = 'Google Chrome';     TestCommand = '' }
+    @{ PackageId = 'Mozilla.Firefox';            DisplayName = 'Firefox';           TestCommand = '' }
     @{ PackageId = 'Python.Python.3.13';         DisplayName = 'Python 3.13';       TestCommand = 'python' }
     @{ PackageId = 'jqlang.jq';                  DisplayName = 'jq';                TestCommand = 'jq' }
     @{ PackageId = 'BurntSushi.ripgrep.MSVC';    DisplayName = 'ripgrep';           TestCommand = 'rg' }
@@ -347,67 +369,7 @@ if (-not $SkipWinget) {
 
 #endregion Section 1
 
-#region Section 2: Claude Code (npm)
-
-if (-not $SkipClaudeCode) {
-    Write-Host "`n=== Claude Code (npm) ===" -ForegroundColor Cyan
-
-    # npm may not be in PATH yet if Node.js was just installed -- check known locations
-    if (-not (Test-CommandExists -CommandName 'npm')) {
-        $nodePaths = @(
-            "$env:ProgramFiles\nodejs"
-            "$env:LOCALAPPDATA\Programs\nodejs"
-        )
-        foreach ($nodePath in $nodePaths) {
-            if (Test-Path -Path "$nodePath\npm.cmd") {
-                Write-Host "  npm found at $nodePath (not yet in PATH)" -ForegroundColor DarkGray
-                $env:PATH = "$nodePath;$env:PATH"
-                break
-            }
-        }
-    }
-
-    if (-not (Test-CommandExists -CommandName 'npm')) {
-        Write-Host '  npm not found. Install Node.js first (included in winget section).' -ForegroundColor Red
-        Write-Host '  If Node.js was just installed, restart your terminal and re-run.' -ForegroundColor Yellow
-        $results.Failed.Add('claude-code (npm not available)')
-    }
-    else {
-        $isClaudeInstalled = $false
-        try {
-            $npmList = npm list -g @anthropic-ai/claude-code 2>&1 | Out-String
-            $isClaudeInstalled = $npmList -match 'claude-code'
-        }
-        catch { }
-
-        if ($isClaudeInstalled) {
-            Write-Host '  claude-code: Already installed' -ForegroundColor Green
-            $results.Skipped.Add('claude-code')
-        }
-        elseif ($PSCmdlet.ShouldProcess('claude-code', 'npm install -g @anthropic-ai/claude-code')) {
-            Write-Host '  claude-code: Installing...' -ForegroundColor Yellow
-            try {
-                npm install -g @anthropic-ai/claude-code 2>&1 | Out-Null
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Host '  claude-code: Installed' -ForegroundColor Green
-                    $results.Installed.Add('claude-code')
-                }
-                else {
-                    Write-Host '  claude-code: FAILED (exit code $LASTEXITCODE)' -ForegroundColor Red
-                    $results.Failed.Add('claude-code')
-                }
-            }
-            catch {
-                Write-Host "  claude-code: FAILED - $($_.Exception.Message)" -ForegroundColor Red
-                $results.Failed.Add('claude-code')
-            }
-        }
-    }
-}
-
-#endregion Section 2
-
-#region Section 3: VS Code Extensions
+#region Section 2: VS Code Extensions
 
 if (-not $SkipExtensions) {
     Write-Host "`n=== VS Code Extensions ===" -ForegroundColor Cyan
@@ -423,9 +385,9 @@ if (-not $SkipExtensions) {
     }
 }
 
-#endregion Section 3
+#endregion Section 2
 
-#region Section 3b: Edge Extensions
+#region Section 2b: Edge Extensions
 
 if (-not $SkipExtensions) {
     Write-Host "`n=== Edge Extensions (manual install) ===" -ForegroundColor Cyan
@@ -434,6 +396,10 @@ if (-not $SkipExtensions) {
         @{
             Name = 'Bitwarden'
             Url  = 'https://microsoftedge.microsoft.com/addons/detail/bitwarden-password-manage/jbkfoedolllekgbhcbcoahefnbanhhlh'
+        }
+        @{
+            Name = 'uBlock Origin'
+            Url  = 'https://microsoftedge.microsoft.com/addons/detail/ublock-origin/odfafepnkmbhccpbejgmiehpchacaeak'
         }
     )
 
@@ -447,9 +413,9 @@ if (-not $SkipExtensions) {
     Write-Host '  NOTE: Edge extensions require manual "Get" click in the browser.' -ForegroundColor DarkYellow
 }
 
-#endregion Section 3b
+#endregion Section 2b
 
-#region Section 4: PowerShell Modules
+#region Section 3: PowerShell Modules
 
 if (-not $SkipModules) {
     Write-Host "`n=== PowerShell Modules ===" -ForegroundColor Cyan
@@ -504,7 +470,7 @@ if (-not $SkipModules) {
     }
 }
 
-#endregion Section 4
+#endregion Section 3
 
 #region Summary
 
@@ -529,8 +495,7 @@ if ($results.Failed.Count -gt 0) {
 Write-Host "`n  Post-install reminders:" -ForegroundColor Yellow
 Write-Host '    1. Restart your terminal to pick up PATH changes' -ForegroundColor Yellow
 Write-Host '    2. Run "Initialize-SCuBA" if you installed ScubaGear' -ForegroundColor Yellow
-Write-Host '    3. Set ANTHROPIC_API_KEY environment variable for Claude Code' -ForegroundColor Yellow
-Write-Host '    4. Run "gh auth login" to authenticate GitHub CLI' -ForegroundColor Yellow
+Write-Host '    3. Run "gh auth login" to authenticate GitHub CLI' -ForegroundColor Yellow
 Write-Host ''
 
 #endregion Summary
